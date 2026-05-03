@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cortex UI</title>
+    <style>
+        body { background: #121212; color: #e0e0e0; font-family: sans-serif; padding: 20px; }
+        textarea, input { width: 100%; padding: 10px; margin: 10px 0; background: #1e1e1e; border: 1px solid #333; color: white; }
+        button { padding: 10px 20px; cursor: pointer; background: #007bff; border: none; color: white; }
+        pre { background: #1e1e1e; padding: 15px; border: 1px solid #333; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Cortex Archetype Expander</h1>
+    <input id="name" placeholder="Component Name (e.g. MyForm)">
+    <textarea id="desc" placeholder="Description"></textarea>
+    <button onclick="expand()">Get Logic</button>
+    <pre id="result"></pre>
+    <script>
+        async function expand() {
+            const resp = await fetch('/expand', {
+                method: 'POST',
+                body: JSON.stringify({
+                    component_name: document.getElementById('name').value,
+                    description: document.getElementById('desc').value
+                })
+            });
+            const data = await resp.json();
+            document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>

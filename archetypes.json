@@ -1,0 +1,44 @@
+[
+  {
+    "name": "Form",
+    "keywords": ["form", "input", "submission"],
+    "states": ["idle", "loading", "success", "error"],
+    "default_logic": "const [{{COMPONENT_NAME}}State, set{{COMPONENT_NAME}}State] = useState('idle');\nconst handleSubmit = async (data) => {\n  set{{COMPONENT_NAME}}State('loading');\n  try {\n    await submitData(data);\n    set{{COMPONENT_NAME}}State('success');\n  } catch (e) { set{{COMPONENT_NAME}}State('error'); }\n};",
+    "required_imports": ["import { useState } from 'react';"]
+  },
+  {
+    "name": "Button",
+    "keywords": ["button", "action", "click"],
+    "states": ["idle", "disabled"],
+    "default_logic": "const [disabled, setDisabled] = useState(false);\nconst handleClick = () => { console.log('{{COMPONENT_NAME}} clicked'); };",
+    "required_imports": ["import { useState } from 'react';"]
+  },
+  {
+    "name": "Modal",
+    "keywords": ["modal", "dialog", "popup"],
+    "states": ["open", "closed"],
+    "default_logic": "const [isOpen, setIsOpen] = useState(false);\nconst toggle{{COMPONENT_NAME}} = () => setIsOpen(!isOpen);",
+    "required_imports": ["import { useState } from 'react';"]
+  },
+  {
+    "name": "Panel",
+    "keywords": ["panel", "container", "box"],
+    "states": ["collapsed", "expanded"],
+    "default_logic": "const [isExpanded, setIsExpanded] = useState(true);",
+    "required_imports": ["import { useState } from 'react';"]
+  },
+  {
+    "name": "SearchBar",
+    "keywords": ["search", "filter", "query"],
+    "states": ["searching", "results"],
+    "default_logic": "const [query, setQuery] = useState('');\nconst handleSearch = (e) => setQuery(e.target.value);",
+    "required_imports": ["import { useState } from 'react';"]
+  },
+  {
+    "name": "Dashboard",
+    "keywords": ["dashboard", "overview", "analytics"],
+    "states": ["loading", "data"],
+    "default_logic": "const [data, setData] = useState(null);\nuseEffect(() => { /* fetch dashboard data */ }, []);",
+    "required_imports": ["import { useState, useEffect } from 'react';"]
+  }
+]
