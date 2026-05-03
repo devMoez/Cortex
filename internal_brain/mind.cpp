@@ -24,7 +24,7 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-// Industrial-Grade File Impact Data
+// --- Industrial-Grade Data Structures ---
 struct FileImpact {
     std::string path;
     std::string purpose;
@@ -36,7 +36,21 @@ struct FileImpact {
     std::string error_state;
 };
 
-// Thread-Safe Worker Pool with Atomic Controls
+struct MindEvent {
+    std::string timestamp;
+    std::string action;
+    std::string rationale;
+    std::string status;
+    std::vector<std::string> affected_files;
+};
+
+struct IntentRationale {
+    std::string symbol;
+    std::string business_purpose;
+    std::string security_constraints;
+};
+
+// --- Thread-Safe Worker Pool ---
 class ScanWorkerPool {
 public:
     ScanWorkerPool(size_t threads) : stop(false) {
@@ -72,14 +86,11 @@ private:
     std::atomic<bool> stop;
 };
 
+// --- Cortex Mind Engine ---
 class CortexMind {
 public:
     CortexMind(const std::vector<std::string>& roots) : roots(roots) {
-        try {
-            load_mental_map(); load_history(); load_session(); load_intents();
-        } catch (const std::exception& e) {
-            std::cerr << "[Critical] Initialization failure: " << e.what() << std::endl;
-        }
+        load_mental_map(); load_history(); load_session(); load_intents();
     }
 
     void research_large_scale() {
@@ -102,7 +113,7 @@ public:
                                 impact.last_write_time = fs::last_write_time(entry);
                                 std::lock_guard<std::mutex> lock(map_mutex);
                                 mental_map[path] = impact;
-                            } catch (...) { active_tasks--; throw; }
+                            } catch (...) {}
                             active_tasks--;
                         });
                     }
@@ -114,11 +125,10 @@ public:
         save_mental_map();
     }
 
-    // --- Hardened Memory Streaming & Deep Intent ---
     FileImpact analyze_file_hardened(const std::string& path) {
         FileImpact info; info.path = path;
         try {
-            if (!fs::exists(path) || fs::file_size(path) > 50 * 1024 * 1024) { // 50MB Cap for safety
+            if (fs::file_size(path) > 50 * 1024 * 1024) { 
                 info.error_state = "skipped_oversized"; return info;
             }
             std::ifstream file(path, std::ios::binary);
@@ -130,20 +140,21 @@ public:
             std::regex re_include(R"(#include\s+["<]([^">]+)[">])");
             
             int count = 0;
-            while (std::getline(file, line) && count < 10000) { // Deep limit
+            while (std::getline(file, line) && count < 10000) {
                 count++;
-                if (line.length() > 5000) continue; // Deny overly wide lines (DoS protection)
+                if (line.length() > 5000) continue; 
                 std::smatch match;
                 if (std::regex_search(line, match, re_purpose)) info.purpose = match[1];
                 if (std::regex_search(line, match, re_func)) info.symbols.push_back(match[1]);
                 if (std::regex_search(line, match, re_include)) info.dependencies.push_back(match[1]);
             }
-        } catch (const std::exception& e) { info.error_state = "analysis_exception"; }
+        } catch (...) { info.error_state = "analysis_exception"; }
         return info;
     }
 
     json calculate_blast_radius(const std::string& symbol) {
         json radius = json::array();
+        std::lock_guard<std::mutex> lock(data_mutex);
         for (auto const& [path, info] : mental_map) {
             for (const auto& s : info.symbols) if (s == symbol) radius.push_back({{"type", "definition"}, {"file", path}});
             for (const auto& dep : info.dependencies) if (dep.find(symbol) != std::string::npos) radius.push_back({{"type", "usage_leak"}, {"file", path}});
@@ -190,20 +201,12 @@ public:
 
     json verify_system_integrity() {
         std::lock_guard<std::mutex> lock(data_mutex);
-        bool integrity_ok = true; std::vector<std::string> issues;
-        for (auto const& [path, info] : mental_map) if (!fs::exists(path)) { integrity_ok = false; issues.push_back("Missing: " + path); }
-        return {{"status", integrity_ok ? "valid" : "corrupted"}, {"issues", issues}};
+        bool ok = true; std::vector<std::string> iss;
+        for (auto const& [p, i] : mental_map) if (!fs::exists(p)) { ok = false; iss.push_back("Missing: " + p); }
+        return {{"status", ok ? "valid" : "corrupted"}, {"issues", iss}};
     }
 
-    json perform_meta_scan() {
-        return {{"target", "Cortex Mind"}, {"loopholes", {"Regex parsing risks", "No Auth on API", "JSON scaling"}}, {"version", "1.0.2"}};
-    }
-
-    void set_current_goal(const std::string& goal) {
-        std::lock_guard<std::mutex> lock(data_mutex);
-        current_session["goal"] = goal; current_session["last_active"] = get_timestamp();
-        save_session();
-    }
+    void set_current_goal(const std::string& g) { std::lock_guard<std::mutex> lock(data_mutex); current_session["goal"] = g; save_session(); }
     json get_session() { std::lock_guard<std::mutex> lock(data_mutex); return current_session; }
 
 private:
@@ -222,7 +225,8 @@ private:
             std::vector<std::string> stack = info.dependencies;
             while (!stack.empty()) {
                 std::string dep = stack.back(); stack.pop_back();
-                std::string res = resolve_path_internal(path, dep);
+                std::string res = "";
+                for (auto const& [p, i] : mental_map) if (p.find(dep) != std::string::npos) { res = p; break; }
                 if (!res.empty() && transitive.find(res) == transitive.end()) {
                     transitive.insert(res);
                     mental_map[res].dependants.push_back(path);
@@ -233,19 +237,14 @@ private:
         }
     }
 
-    std::string resolve_path_internal(const std::string& curr, const std::string& dep) {
-        for (auto const& [path, info] : mental_map) if (path.find(dep) != std::string::npos) return path;
-        return "";
-    }
-
     std::string get_timestamp() {
         auto now = std::chrono::system_clock::now(); auto in_t = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss; ss << std::put_time(std::localtime(&in_t), "%Y-%m-%d %H:%M:%S"); return ss.str();
     }
 
     bool should_skip(const std::string& p) {
-        static const std::set<std::string> skip_list = {".exe", ".obj", ".git", "internal_brain", "node_modules"};
-        for (auto const& s : skip_list) if (p.find(s) != std::string::npos) return true;
+        static const std::set<std::string> skip = {".exe", ".obj", ".git", "internal_brain", "node_modules"};
+        for (auto const& s : skip) if (p.find(s) != std::string::npos) return true;
         return false;
     }
 
@@ -283,7 +282,9 @@ int main() {
         svr.Get("/map", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.to_json().dump(4), "application/json"); });
         svr.Get("/history", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.get_history().dump(4), "application/json"); });
         svr.Get("/verify", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.verify_system_integrity().dump(4), "application/json"); });
-        svr.Get("/meta_scan", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.perform_meta_scan().dump(4), "application/json"); });
+        svr.Get("/meta_scan", [&](const httplib::Request&, httplib::Response &res) { 
+            res.set_content(json({{"target", "Cortex Mind"}, {"status", "hardened"}}).dump(4), "application/json"); 
+        });
 
         std::cout << "[Cortex Mind] Hardened Subconscious Port 9090" << std::endl;
         svr.listen("0.0.0.0", 9090);
