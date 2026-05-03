@@ -1,11 +1,12 @@
 #define CPPHTTPLIB_OPENSSL_SUPPORT
-#include "httplib.h"
-#include "json.hpp"
-#include <fstream>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <iterator>
+#include "httplib.h"
+#include "json.hpp"
 
 using json = nlohmann::json;
 
@@ -22,26 +23,34 @@ std::string replaceAll(std::string str, const std::string& from, const std::stri
 
 int main() {
     std::ifstream f("archetypes.json");
+    if (!f.is_open()) {
+        std::cerr << "Error: Could not open archetypes.json" << std::endl;
+        return 1;
+    }
     f >> archetypes;
 
     httplib::Server svr;
 
     svr.Get("/", [](const httplib::Request &, httplib::Response &res) {
         std::ifstream file("test.html");
-        std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        res.set_content(content, "text/html");
+        if (file.is_open()) {
+            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            res.set_content(content, "text/html");
+        } else {
+            res.status = 404;
+        }
     });
 
     svr.Post("/expand", [](const httplib::Request &req, httplib::Response &res) {
         auto body = json::parse(req.body);
         std::string name = body["component_name"];
-        std::string desc = body["description"];
+        std::string desc = body.contains("description") ? body["description"].get<std::string>() : "";
         
         // --- CONSTRUCTIVE ENGINEERING: Risk Assessment ---
         try {
             std::cout << "[Cortex Core] Consulting brain for risk assessment..." << std::endl;
             httplib::Client brain("localhost", 9090);
-            brain.set_connection_timeout(0, 500); // 500ms timeout
+            brain.set_connection_timeout(0, 500); 
             
             json graft_req = {{"symbol", name}};
             auto graft_res = brain.Post("/graft", graft_req.dump(), "application/json");
@@ -54,10 +63,10 @@ int main() {
                     std::cout << "[Cortex Core] Risk assessment clear. Confidence: " << risk["confidence"] << std::endl;
                 }
             } else {
-                std::cerr << "[Cortex Core] Brain unreachable or slow. Proceeding with caution." << std::endl;
+                std::cerr << "[Cortex Core] Brain unreachable. Proceeding in standalone mode." << std::endl;
             }
-        } catch (const std::exception& e) {
-            std::cerr << "[Cortex Core] Brain communication error: " << e.what() << std::endl;
+        } catch (...) {
+            std::cerr << "[Cortex Core] Brain communication error." << std::endl;
         }
 
         auto match_str = [&](const std::string& s) {
@@ -71,7 +80,7 @@ int main() {
         };
 
         json matched = match_str(name);
-        if (matched.is_null()) matched = match_str(desc);
+        if (matched.is_null() && !desc.empty()) matched = match_str(desc);
         if (matched.is_null()) {
             matched = {
                 {"name", "Container"},
