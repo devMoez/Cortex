@@ -37,8 +37,29 @@ int main() {
         std::string name = body["component_name"];
         std::string desc = body["description"];
         
-        json matched = nullptr;
-        
+        // --- CONSTRUCTIVE ENGINEERING: Risk Assessment ---
+        try {
+            std::cout << "[Cortex Core] Consulting brain for risk assessment..." << std::endl;
+            httplib::Client brain("localhost", 9090);
+            brain.set_connection_timeout(0, 500); // 500ms timeout
+            
+            json graft_req = {{"symbol", name}};
+            auto graft_res = brain.Post("/graft", graft_req.dump(), "application/json");
+            
+            if (graft_res && graft_res->status == 200) {
+                auto risk = json::parse(graft_res->body);
+                if (risk["status"] == "high_risk") {
+                    std::cout << "[Cortex Core] WARNING: Potential collision with " << risk["affected_files"].dump() << std::endl;
+                } else {
+                    std::cout << "[Cortex Core] Risk assessment clear. Confidence: " << risk["confidence"] << std::endl;
+                }
+            } else {
+                std::cerr << "[Cortex Core] Brain unreachable or slow. Proceeding with caution." << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "[Cortex Core] Brain communication error: " << e.what() << std::endl;
+        }
+
         auto match_str = [&](const std::string& s) {
             for (auto& arch : archetypes) {
                 for (auto& kw : arch["keywords"]) {
@@ -49,7 +70,7 @@ int main() {
             return json(nullptr);
         };
 
-        matched = match_str(name);
+        json matched = match_str(name);
         if (matched.is_null()) matched = match_str(desc);
         if (matched.is_null()) {
             matched = {
