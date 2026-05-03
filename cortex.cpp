@@ -46,6 +46,19 @@ int main() {
         }
     });
 
+    svr.Get("/analyze_deps", [](const httplib::Request &, httplib::Response &res) {
+        try {
+            httplib::Client brain("localhost", 9090);
+            auto brain_res = brain.Get("/analyze_deps");
+            if (brain_res && brain_res->status == 200) {
+                res.set_content(brain_res->body, "application/json");
+            } else {
+                res.status = 500;
+                res.set_content("{\"error\": \"Brain unreachable\"}", "application/json");
+            }
+        } catch (...) { res.status = 500; }
+    });
+
     svr.Post("/expand", [](const httplib::Request &req, httplib::Response &res) {
         json body;
         try {

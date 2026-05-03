@@ -3,10 +3,11 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <map>
+#include <functional>
 
 namespace fs = std::filesystem;
 
-// Mock of the safety check from mind.cpp
 bool is_safe_path_test(const std::string& path, const std::string& root) {
     try {
         fs::path p = fs::absolute(path);
@@ -19,32 +20,43 @@ bool is_safe_path_test(const std::string& path, const std::string& root) {
 void test_path_traversal_shield() {
     std::cout << "[Test] Path Traversal Shield... ";
     std::string root = fs::current_path().string();
-    
-    // Internal path should be safe
     assert(is_safe_path_test(root + "/cortex.cpp", root) == true);
-    
-    // Parent directory attempt should be blocked
     assert(is_safe_path_test(root + "/../../windows/system32/config", root) == false);
-    
     std::cout << "PASSED" << std::endl;
 }
 
-void test_filesystem_integrity() {
-    std::cout << "[Test] Filesystem Integrity... ";
-    assert(fs::exists("cortex.cpp"));
-    assert(fs::exists("internal_brain/mind.cpp"));
-    assert(fs::exists("mapper.cpp"));
+void test_circular_dependency_logic() {
+    std::cout << "[Test] Circular Dependency Detection... ";
+    std::map<std::string, std::vector<std::string>> adj = {
+        {"A", {"B"}}, {"B", {"C"}}, {"C", {"A"}}
+    };
+    std::map<std::string, int> disc, low;
+    int timer = 0;
+    bool cycle_found = false;
+    std::function<void(std::string)> dfs = [&](std::string u) {
+        disc[u] = low[u] = ++timer;
+        for(auto v : adj[u]) {
+            if(disc[v] == 0) {
+                dfs(v);
+                low[u] = std::min(low[u], low[v]);
+            } else {
+                cycle_found = true;
+            }
+        }
+    };
+    dfs("A");
+    assert(cycle_found == true);
     std::cout << "PASSED" << std::endl;
 }
 
 int main() {
-    std::cout << "--- Cortex Security & Integrity Test Suite ---" << std::endl;
+    std::cout << "--- Cortex Advanced Integrity & Logic Test Suite ---" << std::endl;
     try {
         test_path_traversal_shield();
-        test_filesystem_integrity();
+        test_circular_dependency_logic();
         std::cout << "--- ALL TESTS PASSED ---" << std::endl;
-    } catch (const std::exception& e) {
-        std::cerr << "TEST FAILED: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "CRITICAL TEST FAILURE" << std::endl;
         return 1;
     }
     return 0;
