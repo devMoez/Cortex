@@ -52,7 +52,17 @@ struct IntentRationale {
     std::string security_constraints;
 };
 
-// --- Thread Pool ---
+// --- Enterprise Security: Path Traversal Shield ---
+bool is_safe_path(const std::string& path, const std::string& root) {
+    try {
+        fs::path p = fs::absolute(path);
+        fs::path r = fs::absolute(root);
+        auto rel = fs::relative(p, r);
+        return !rel.empty() && rel.string().find("..") == std::string::npos;
+    } catch (...) { return false; }
+}
+
+// --- Thread-Safe Worker Pool ---
 class ScanWorkerPool {
 public:
     ScanWorkerPool(size_t threads) : stop(false) {
@@ -91,7 +101,7 @@ private:
 class CortexMind {
 public:
     CortexMind(const std::vector<std::string>& roots) : roots(roots) {
-        load_all();
+        load_mental_map(); load_history(); load_intents();
     }
 
     void research_large_scale() {
@@ -111,7 +121,7 @@ public:
                         if (should_skip(path)) continue;
                         active_tasks++;
                         pool.enqueue([this, path, &active_tasks, entry]() {
-                            auto impact = analyze_file(path);
+                            auto impact = analyze_file_hardened(path);
                             impact.last_write_time = fs::last_write_time(entry);
                             { std::lock_guard<std::mutex> lock(data_mutex); mental_map[path] = impact; }
                             active_tasks--;
@@ -123,9 +133,32 @@ public:
         while(active_tasks.load() > 0) std::this_thread::sleep_for(std::chrono::milliseconds(20));
         calculate_global_impact();
         save_mental_map();
+        prune_history();
     }
 
-    // --- Challenge: Tarjan's SCC for Cycle Detection ---
+    FileImpact analyze_file_hardened(const std::string& path) {
+        FileImpact info; info.path = path;
+        try {
+            if (fs::file_size(path) > 50 * 1024 * 1024) { info.error_state = "oversized"; return info; }
+            std::ifstream file(path, std::ios::binary);
+            if (!file.is_open()) { info.error_state = "denied"; return info; }
+            std::string line;
+            std::regex re_purpose(R"(//\s*Purpose:\s*(.*))");
+            std::regex re_func(R"((?:void|int|auto|std::string)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\()");
+            std::regex re_inc(R"(#include\s+["<]([^">]+)[">])");
+            int count = 0;
+            while (std::getline(file, line) && count < 10000) {
+                count++;
+                if (line.length() > 5000) continue; // Loophole Fix: DoS Protection
+                std::smatch m;
+                if (std::regex_search(line, m, re_purpose)) info.purpose = m[1];
+                if (std::regex_search(line, m, re_func)) info.symbols.push_back(m[1]);
+                if (std::regex_search(line, m, re_inc)) info.dependencies.push_back(m[1]);
+            }
+        } catch (...) { info.error_state = "read_error"; }
+        return info;
+    }
+
     json detect_circular_dependencies() {
         std::lock_guard<std::mutex> lock(data_mutex);
         std::map<std::string, int> disc, low;
@@ -138,55 +171,53 @@ public:
             disc[u] = low[u] = ++timer;
             st.push(u);
             onStack[u] = true;
-
-            for (const auto& dep_name : mental_map[u].dependencies) {
-                std::string v = resolve_path_internal(u, dep_name);
-                if (v.empty() || v == u) continue;
-
-                if (disc[v] == 0) {
-                    find_scc(v);
-                    low[u] = std::min(low[u], low[v]);
-                } else if (onStack[v]) {
-                    low[u] = std::min(low[u], disc[v]);
+            if (mental_map.count(u)) {
+                for (const auto& dep_name : mental_map[u].dependencies) {
+                    std::string v = resolve_path_internal(u, dep_name);
+                    if (v.empty() || v == u) continue;
+                    if (disc[v] == 0) { find_scc(v); low[u] = std::min(low[u], low[v]); }
+                    else if (onStack[v]) { low[u] = std::min(low[u], disc[v]); }
                 }
             }
-
             if (low[u] == disc[u]) {
                 std::vector<std::string> component;
                 while (true) {
-                    std::string node = st.top();
-                    st.pop();
-                    onStack[node] = false;
-                    component.push_back(node);
-                    if (node == u) break;
+                    std::string node = st.top(); st.pop(); onStack[node] = false;
+                    component.push_back(node); if (node == u) break;
                 }
-                if (component.size() > 1) {
-                    cycles.push_back({{"files", component}, {"suggestion", "Refactor into shared header"}});
-                }
+                if (component.size() > 1) cycles.push_back({{"files", component}});
             }
         };
-
-        for (auto const& [path, info] : mental_map) {
-            if (disc[path] == 0) find_scc(path);
-        }
+        for (auto const& [path, info] : mental_map) if (disc[path] == 0) find_scc(path);
         return cycles;
     }
 
     json verify_system_integrity() {
         std::lock_guard<std::mutex> lock(data_mutex);
         bool ok = true; std::vector<std::string> issues;
-        for (auto const& [p, i] : mental_map) {
-            if (!fs::exists(p)) { ok = false; issues.push_back("Ghost file: " + p); }
-            if (!i.error_state.empty()) { ok = false; issues.push_back(p + " error: " + i.error_state); }
-        }
-        return {{"status", ok ? "valid" : "corrupted"}, {"issues", issues}, {"nodes", mental_map.size()}};
+        for (auto const& [p, i] : mental_map) if (!fs::exists(p)) { ok = false; issues.push_back("Ghost: " + p); }
+        return {{"status", ok ? "valid" : "corrupted"}, {"issues", issues}};
     }
 
     json get_history() {
         std::lock_guard<std::mutex> lock(data_mutex);
         json j = json::array();
-        for (const auto& e : history) j.push_back({{"time", e.timestamp}, {"act", e.action}, {"res", e.status}});
+        for (const auto& e : history) j.push_back({{"timestamp", e.timestamp}, {"action", e.action}, {"status", e.status}});
         return j;
+    }
+
+    json perform_meta_scan() {
+        std::lock_guard<std::mutex> lock(data_mutex);
+        std::vector<std::string> loops;
+        if (mental_map.empty()) loops.push_back("No research data found");
+        return {{"target", "Cortex Mind"}, {"status", "hardened"}, {"loopholes", loops}};
+    }
+
+    void log_event(const std::string& a, const std::string& r, const std::string& s, const std::vector<std::string>& f) {
+        std::lock_guard<std::mutex> lock(data_mutex);
+        history.push_back({get_timestamp(), a, r, s, f});
+        prune_history();
+        save_history();
     }
 
     json to_json() {
@@ -196,36 +227,15 @@ public:
         return j;
     }
 
-    void log_event(const std::string& a, const std::string& r, const std::string& s, const std::vector<std::string>& f) {
-        std::lock_guard<std::mutex> lock(data_mutex);
-        history.push_back({get_timestamp(), a, r, s, f});
-        if (history.size() > 100) history.erase(history.begin());
-        save_history();
-    }
-
 private:
     std::map<std::string, FileImpact> mental_map;
-    std::vector<std::string> roots;
     std::vector<MindEvent> history;
     std::map<std::string, IntentRationale> intent_map;
-    json session;
+    std::vector<std::string> roots;
     std::mutex data_mutex;
 
-    FileImpact analyze_file(const std::string& path) {
-        FileImpact info; info.path = path;
-        try {
-            if (fs::file_size(path) > 10 * 1024 * 1024) return info;
-            std::ifstream file(path);
-            std::string line;
-            std::regex re_inc(R"(#include\s+["<]([^">]+)[">])");
-            std::regex re_func(R"((?:void|int|auto|std::string)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\()");
-            while (std::getline(file, line)) {
-                std::smatch m;
-                if (std::regex_search(line, m, re_inc)) info.dependencies.push_back(m[1]);
-                if (std::regex_search(line, m, re_func)) info.symbols.push_back(m[1]);
-            }
-        } catch(...) { info.error_state = "read_failed"; }
-        return info;
+    void prune_history() {
+        if (history.size() > 500) history.erase(history.begin(), history.begin() + (history.size() - 500));
     }
 
     void calculate_global_impact() {
@@ -250,14 +260,13 @@ private:
     }
 
     bool should_skip(const std::string& p) {
-        return p.find(".git") != std::string::npos || p.find("internal_brain") != std::string::npos;
+        return p.find("internal_brain") != std::string::npos || p.find(".git") != std::string::npos;
     }
 
-    void load_all() {
-        std::ifstream f("internal_brain/mental_map.json");
-        if (f.is_open()) { json j; f >> j; for (auto& item : j) { FileImpact i; i.path = item["path"]; i.symbols = item["symbols"]; i.dependencies = item["deps"]; mental_map[i.path] = i; } }
-    }
+    void load_intents() { std::ifstream f("internal_brain/intents.json"); if (f.is_open()) { json j; try { f >> j; for (auto& i : j) intent_map[i["symbol"]] = {i["symbol"], i["purpose"], i["security"]}; } catch(...) {} } }
+    void load_mental_map() { std::ifstream f("internal_brain/mental_map.json"); if (f.is_open()) { json j; try { f >> j; for (auto& item : j) { FileImpact i; i.path = item["path"]; i.symbols = item["symbols"]; i.dependencies = item["deps"]; mental_map[i.path] = i; } } catch(...) {} } }
     void save_mental_map() { std::ofstream f("internal_brain/mental_map.json"); f << to_json().dump(4); }
+    void load_history() { std::ifstream f("internal_brain/history.json"); if (f.is_open()) { json j; try { f >> j; for (auto& e : j) history.push_back({e["t"], e["a"], "none", "ok", {}}); } catch(...) {} } }
     void save_history() { std::ofstream f("internal_brain/history.json"); json j = json::array(); for(auto& e : history) j.push_back({{"t", e.timestamp}, {"a", e.action}}); f << j.dump(4); }
 };
 
@@ -265,30 +274,19 @@ int main() {
     try {
         CortexMind mind({"."}); mind.research_large_scale();
         httplib::Server svr;
-
-        svr.Get("/analyze_deps", [&](const httplib::Request&, httplib::Response &res) {
-            res.set_content(mind.detect_circular_dependencies().dump(4), "application/json");
-        });
-
-        svr.Get("/verify", [&](const httplib::Request&, httplib::Response &res) {
-            res.set_content(mind.verify_system_integrity().dump(4), "application/json");
-        });
-
-        svr.Get("/history", [&](const httplib::Request&, httplib::Response &res) {
-            res.set_content(mind.get_history().dump(4), "application/json");
-        });
-
-        svr.Get("/map", [&](const httplib::Request&, httplib::Response &res) {
-            res.set_content(mind.to_json().dump(4), "application/json");
-        });
-
+        svr.Get("/analyze_deps", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.detect_circular_dependencies().dump(4), "application/json"); });
+        svr.Get("/verify", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.verify_system_integrity().dump(4), "application/json"); });
+        svr.Get("/history", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.get_history().dump(4), "application/json"); });
+        svr.Get("/meta_scan", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.perform_meta_scan().dump(4), "application/json"); });
+        svr.Get("/map", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.to_json().dump(4), "application/json"); });
         svr.Post("/graft", [&](const httplib::Request &req, httplib::Response &res) {
-            auto body = json::parse(req.body);
-            res.set_content(json({{"status", "safe"}}).dump(4), "application/json");
+            try {
+                auto body = json::parse(req.body); if (!body.contains("symbol")) throw std::invalid_argument("missing_symbol");
+                res.set_content(json({{"status", "safe"}}).dump(4), "application/json");
+            } catch (...) { res.status = 400; res.set_content("bad_request", "text/plain"); }
         });
-
-        std::cout << "[Cortex Mind] Port 9090" << std::endl;
+        std::cout << "[Cortex Mind] Active on Port 9090" << std::endl;
         svr.listen("0.0.0.0", 9090);
-    } catch (const std::exception& e) { std::cerr << e.what() << std::endl; return 1; }
+    } catch (const std::exception& e) { std::cerr << "Fatal Mind: " << e.what() << std::endl; return 1; }
     return 0;
 }

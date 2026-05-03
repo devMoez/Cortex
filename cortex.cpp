@@ -4,6 +4,7 @@
 #include <string>
 #include <algorithm>
 #include <iterator>
+#include <stdexcept>
 #include "httplib.h"
 #include "json.hpp"
 
@@ -22,16 +23,8 @@ std::string replaceAll(std::string str, const std::string& from, const std::stri
 
 int main() {
     std::ifstream f("archetypes.json");
-    if (!f.is_open()) {
-        std::cerr << "Error: Could not open archetypes.json" << std::endl;
-        return 1;
-    }
-    try {
-        f >> archetypes;
-    } catch (const std::exception& e) {
-        std::cerr << "Error parsing archetypes.json: " << e.what() << std::endl;
-        return 1;
-    }
+    if (!f.is_open()) { std::cerr << "Error: Could not open archetypes.json" << std::endl; return 1; }
+    try { f >> archetypes; } catch (...) { std::cerr << "Error parsing archetypes.json" << std::endl; return 1; }
 
     httplib::Server svr;
 
@@ -40,97 +33,54 @@ int main() {
         if (file.is_open()) {
             std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
             res.set_content(content, "text/html");
-        } else {
-            res.status = 404;
-            res.set_content("test.html not found", "text/plain");
-        }
+        } else { res.status = 404; res.set_content("UI not found", "text/plain"); }
     });
 
-    svr.Get("/analyze_deps", [](const httplib::Request &, httplib::Response &res) {
-        try {
+    // --- Proxy Endpoints to Internal Mind ---
+    auto proxy_get = [](const std::string& endpoint) {
+        return [endpoint](const httplib::Request &, httplib::Response &res) {
             httplib::Client brain("localhost", 9090);
-            auto brain_res = brain.Get("/analyze_deps");
+            auto brain_res = brain.Get(endpoint);
             if (brain_res && brain_res->status == 200) {
                 res.set_content(brain_res->body, "application/json");
             } else {
-                res.status = 500;
-                res.set_content("{\"error\": \"Brain unreachable\"}", "application/json");
+                res.status = 503;
+                res.set_content("{\"error\": \"Internal Brain Offline\"}", "application/json");
             }
-        } catch (...) { res.status = 500; }
-    });
+        };
+    };
+
+    svr.Get("/analyze_deps", proxy_get("/analyze_deps"));
+    svr.Get("/history", proxy_get("/history"));
+    svr.Get("/verify", proxy_get("/verify"));
+    svr.Get("/meta_scan", proxy_get("/meta_scan"));
+    svr.Get("/map", proxy_get("/map"));
 
     svr.Post("/expand", [](const httplib::Request &req, httplib::Response &res) {
-        json body;
-        try {
-            body = json::parse(req.body);
-        } catch (...) {
-            res.status = 400;
-            res.set_content("Invalid JSON", "text/plain");
-            return;
-        }
-
-        std::string name = body.contains("component_name") ? body["component_name"].get<std::string>() : "Unknown";
-        std::string desc = body.contains("description") ? body["description"].get<std::string>() : "";
+        json body; try { body = json::parse(req.body); } catch (...) { res.status = 400; return; }
+        std::string name = body.value("component_name", "Unknown");
         
-        try {
-            std::cout << "[Cortex Core] Consulting brain for risk assessment..." << std::endl;
-            httplib::Client brain("localhost", 9090);
-            brain.set_connection_timeout(0, 500); 
-            
-            json graft_req = {{"symbol", name}};
-            auto graft_res = brain.Post("/graft", graft_req.dump(), "application/json");
-            
-            if (graft_res && graft_res->status == 200) {
-                auto risk = json::parse(graft_res->body);
-                if (risk["status"] == "high_risk") {
-                    std::cout << "[Cortex Core] WARNING: Potential collision with " << risk["affected_files"].dump() << std::endl;
-                } else {
-                    std::cout << "[Cortex Core] Risk assessment clear. Confidence: " << risk["confidence"] << std::endl;
-                }
-            } else {
-                std::cerr << "[Cortex Core] Brain unreachable. Proceeding in standalone mode." << std::endl;
-            }
-        } catch (...) {
-            std::cerr << "[Cortex Core] Brain communication error." << std::endl;
-        }
+        // Risk assessment via brain
+        httplib::Client brain("localhost", 9090);
+        json graft_req = {{"symbol", name}};
+        auto graft_res = brain.Post("/graft", graft_req.dump(), "application/json");
 
         auto match_str = [&](const std::string& s) {
             for (auto& arch : archetypes) {
-                if (arch.contains("keywords")) {
-                    for (auto& kw : arch["keywords"]) {
-                        std::string k = kw.get<std::string>();
-                        if (s.find(k) != std::string::npos) return arch;
-                    }
-                }
+                for (auto& kw : arch["keywords"]) if (s.find(kw.get<std::string>()) != std::string::npos) return arch;
             }
             return json(nullptr);
         };
 
         json matched = match_str(name);
-        if (matched.is_null() && !desc.empty()) matched = match_str(desc);
-        if (matched.is_null()) {
-            matched = {
-                {"name", "Container"},
-                {"default_logic", "/* Generic container */"},
-                {"required_imports", json::array()},
-                {"states", json::array()}
-            };
-        }
+        if (matched.is_null()) matched = {{"name", "Generic"}, {"default_logic", "/* Logic */"}, {"required_imports", json::array()}, {"states", json::array()}};
 
-        std::string logic = matched.contains("default_logic") ? matched["default_logic"].get<std::string>() : "";
-        std::string code = replaceAll(logic, "{{COMPONENT_NAME}}", name);
-
-        json output = {
-            {"matched_archetype", matched["name"]},
-            {"injected_code", code},
-            {"imports_to_add", matched.contains("required_imports") ? matched["required_imports"] : json::array()},
-            {"states_added", matched.contains("states") ? matched["states"] : json::array()}
-        };
-
-        res.set_content(output.dump(), "application/json");
+        std::string code = replaceAll(matched["default_logic"], "{{COMPONENT_NAME}}", name);
+        json out = {{"archetype", matched["name"]}, {"code", code}, {"imports", matched["required_imports"]}};
+        res.set_content(out.dump(), "application/json");
     });
 
-    std::cout << "Server starting at http://localhost:8080" << std::endl;
+    std::cout << "[Cortex Core] Active on http://localhost:8080" << std::endl;
     svr.listen("0.0.0.0", 8080);
     return 0;
 }
