@@ -24,7 +24,6 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-// --- Industrial-Grade Data Structures ---
 struct FileImpact {
     std::string path;
     std::string purpose;
@@ -50,7 +49,6 @@ struct IntentRationale {
     std::string security_constraints;
 };
 
-// --- Thread-Safe Worker Pool ---
 class ScanWorkerPool {
 public:
     ScanWorkerPool(size_t threads) : stop(false) {
@@ -86,7 +84,6 @@ private:
     std::atomic<bool> stop;
 };
 
-// --- Cortex Mind Engine ---
 class CortexMind {
 public:
     CortexMind(const std::vector<std::string>& roots) : roots(roots) {
@@ -128,17 +125,13 @@ public:
     FileImpact analyze_file_hardened(const std::string& path) {
         FileImpact info; info.path = path;
         try {
-            if (fs::file_size(path) > 50 * 1024 * 1024) { 
-                info.error_state = "skipped_oversized"; return info;
-            }
+            if (fs::file_size(path) > 50 * 1024 * 1024) { info.error_state = "skipped_oversized"; return info; }
             std::ifstream file(path, std::ios::binary);
             if (!file.is_open()) { info.error_state = "access_denied"; return info; }
-            
             std::string line;
             std::regex re_purpose(R"(//\s*Purpose:\s*(.*))");
             std::regex re_func(R"((?:void|int|auto|std::string|char|float|double)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\()");
             std::regex re_include(R"(#include\s+["<]([^">]+)[">])");
-            
             int count = 0;
             while (std::getline(file, line) && count < 10000) {
                 count++;
@@ -206,6 +199,17 @@ public:
         return {{"status", ok ? "valid" : "corrupted"}, {"issues", iss}};
     }
 
+    json perform_meta_scan() {
+        json loopholes = json::array();
+        std::lock_guard<std::mutex> lock(data_mutex);
+        if (mental_map.empty()) loopholes.push_back("Mental map is empty: Research required.");
+        if (intent_map.empty()) loopholes.push_back("No semantic intents defined: System is blind to business logic.");
+        bool wide_lines = false;
+        for (auto const& [p, i] : mental_map) if (i.error_state == "analysis_exception") wide_lines = true;
+        if (wide_lines) loopholes.push_back("Some files triggered analysis exceptions: Check encoding or density.");
+        return {{"target", "Cortex Mind"}, {"status", "active"}, {"loopholes", loopholes}};
+    }
+
     void set_current_goal(const std::string& g) { std::lock_guard<std::mutex> lock(data_mutex); current_session["goal"] = g; save_session(); }
     json get_session() { std::lock_guard<std::mutex> lock(data_mutex); return current_session; }
 
@@ -226,7 +230,9 @@ private:
             while (!stack.empty()) {
                 std::string dep = stack.back(); stack.pop_back();
                 std::string res = "";
-                for (auto const& [p, i] : mental_map) if (p.find(dep) != std::string::npos) { res = p; break; }
+                for (auto const& [p, i] : mental_map) {
+                    if (p.find(dep) != std::string::npos) { res = p; break; }
+                }
                 if (!res.empty() && transitive.find(res) == transitive.end()) {
                     transitive.insert(res);
                     mental_map[res].dependants.push_back(path);
@@ -248,13 +254,13 @@ private:
         return false;
     }
 
-    void load_intents() { std::ifstream f("internal_brain/intents.json"); if (f.is_open()) { json j; f >> j; for (auto& i : j) intent_map[i["symbol"]] = {i["symbol"], i["purpose"], i["security"]}; } }
+    void load_intents() { std::ifstream f("internal_brain/intents.json"); if (f.is_open()) { try { json j; f >> j; for (auto& i : j) intent_map[i["symbol"]] = {i["symbol"], i["purpose"], i["security"]}; } catch(...) {} } }
     void save_intents() { json j = json::array(); for (auto const& [k, i] : intent_map) j.push_back({{"symbol", i.symbol}, {"purpose", i.business_purpose}, {"security", i.security_constraints}}); std::ofstream f("internal_brain/intents.json"); f << j.dump(4); }
-    void load_mental_map() { std::ifstream f("internal_brain/mental_map.json"); if (f.is_open()) { json j; f >> j; for (auto& item : j) { FileImpact i; i.path = item["path"]; i.symbols = item["symbols"].get<std::vector<std::string>>(); i.dependencies = item["dependencies"].get<std::vector<std::string>>(); if (fs::exists(i.path)) i.last_write_time = fs::last_write_time(i.path); mental_map[i.path] = i; } } }
+    void load_mental_map() { std::ifstream f("internal_brain/mental_map.json"); if (f.is_open()) { try { json j; f >> j; for (auto& item : j) { FileImpact i; i.path = item["path"]; i.purpose = item.contains("purpose") ? item["purpose"].get<std::string>() : ""; i.symbols = item["symbols"].get<std::vector<std::string>>(); i.dependencies = item["dependencies"].get<std::vector<std::string>>(); mental_map[i.path] = i; } } catch(...) {} } }
     void save_mental_map() { std::ofstream f("internal_brain/mental_map.json"); f << to_json().dump(4); }
-    void load_history() { std::ifstream f("internal_brain/history.json"); if (f.is_open()) { json j; f >> j; for (auto& e : j) history.push_back({e["timestamp"], e["action"], e["rationale"], e["status"], e["affected_files"].get<std::vector<std::string>>()}); } }
+    void load_history() { std::ifstream f("internal_brain/history.json"); if (f.is_open()) { try { json j; f >> j; for (auto& e : j) history.push_back({e["timestamp"], e["action"], e["rationale"], e["status"], e["affected_files"].get<std::vector<std::string>>()}); } catch(...) {} } }
     void save_history() { std::ofstream f("internal_brain/history.json"); f << get_history().dump(4); }
-    void load_session() { std::ifstream f("internal_brain/session.json"); if (f.is_open()) f >> current_session; else current_session = {{"goal", "None"}}; }
+    void load_session() { std::ifstream f("internal_brain/session.json"); if (f.is_open()) { try { f >> current_session; } catch(...) { current_session = {{"goal", "None"}}; } } else current_session = {{"goal", "None"}}; }
     void save_session() { std::ofstream f("internal_brain/session.json"); f << current_session.dump(4); }
 };
 
@@ -262,11 +268,7 @@ int main() {
     try {
         CortexMind mind({"."}); mind.research_large_scale();
         httplib::Server svr;
-
-        svr.Get("/blast_radius", [&](const httplib::Request &req, httplib::Response &res) {
-            res.set_content(mind.calculate_blast_radius(req.get_param_value("symbol")).dump(4), "application/json");
-        });
-
+        svr.Get("/blast_radius", [&](const httplib::Request &req, httplib::Response &res) { res.set_content(mind.calculate_blast_radius(req.get_param_value("symbol")).dump(4), "application/json"); });
         svr.Post("/graft", [&](const httplib::Request &req, httplib::Response &res) {
             try {
                 auto body = json::parse(req.body); std::string sym = body["symbol"];
@@ -278,15 +280,11 @@ int main() {
                 res.set_content(resp.dump(4), "application/json");
             } catch (...) { res.status = 400; }
         });
-
         svr.Get("/map", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.to_json().dump(4), "application/json"); });
         svr.Get("/history", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.get_history().dump(4), "application/json"); });
         svr.Get("/verify", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.verify_system_integrity().dump(4), "application/json"); });
-        svr.Get("/meta_scan", [&](const httplib::Request&, httplib::Response &res) { 
-            res.set_content(json({{"target", "Cortex Mind"}, {"status", "hardened"}}).dump(4), "application/json"); 
-        });
-
-        std::cout << "[Cortex Mind] Hardened Subconscious Port 9090" << std::endl;
+        svr.Get("/meta_scan", [&](const httplib::Request&, httplib::Response &res) { res.set_content(mind.perform_meta_scan().dump(4), "application/json"); });
+        std::cout << "[Cortex Mind] Active on Port 9090" << std::endl;
         svr.listen("0.0.0.0", 9090);
     } catch (const std::exception& e) { std::cerr << "[Fatal] Server crash: " << e.what() << std::endl; return 1; }
     return 0;
