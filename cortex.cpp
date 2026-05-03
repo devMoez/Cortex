@@ -59,7 +59,6 @@ int main() {
         std::string name = body.contains("component_name") ? body["component_name"].get<std::string>() : "Unknown";
         std::string desc = body.contains("description") ? body["description"].get<std::string>() : "";
         
-        // --- CONSTRUCTIVE ENGINEERING: Risk Assessment ---
         try {
             std::cout << "[Cortex Core] Consulting brain for risk assessment..." << std::endl;
             httplib::Client brain("localhost", 9090);

@@ -47,7 +47,7 @@ public:
                         task = std::move(this->tasks.front());
                         this->tasks.pop();
                     }
-                    task();
+                    if (task) task();
                 }
             });
     }
@@ -80,15 +80,12 @@ public:
         std::mutex map_mutex;
         std::atomic<int> active_tasks(0);
 
-        std::cout << "[User Mapper] Industrial scan active (" << n << " threads)..." << std::endl;
-
         for (const auto& root : roots) {
             if (!fs::exists(root)) continue;
             for (const auto& entry : fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied)) {
                 if (entry.is_regular_file()) {
                     std::string path = entry.path().string();
                     if (should_skip(path)) continue;
-
                     active_tasks++;
                     pool.enqueue([this, path, &map_mutex, &active_tasks, entry]() {
                         auto info = process_file_optimized(path);
@@ -109,7 +106,7 @@ public:
         HANDLE hDir = CreateFileA(roots[0].c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
         if (hDir == INVALID_HANDLE_VALUE) return;
         char buffer[1024]; DWORD bytesReturned;
-        std::cout << "[User Mapper] Watching for changes..." << std::endl;
+        std::cout << "[User Mapper] Watching..." << std::endl;
         while (ReadDirectoryChangesW(hDir, buffer, sizeof(buffer), TRUE, FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE, &bytesReturned, NULL, NULL)) {
             FILE_NOTIFY_INFORMATION* info = (FILE_NOTIFY_INFORMATION*)buffer;
             do {
@@ -117,7 +114,6 @@ public:
                 std::string name(wname.begin(), wname.end());
                 std::string full_path = (fs::path(roots[0]) / name).string();
                 if (!should_skip(full_path) && fs::exists(full_path) && fs::is_regular_file(full_path)) {
-                    std::cout << "Update detected: " << full_path << std::endl;
                     file_map[full_path] = process_file_optimized(full_path);
                     save_map();
                 }
@@ -155,7 +151,6 @@ private:
         FileInfo info; info.path = path;
         std::ifstream file(path, std::ios::binary);
         if (!file.is_open()) return info;
-        
         std::string line;
         std::regex re_purpose(R"(//\s*Purpose:\s*(.*))");
         std::regex re_func(R"((?:void|int|auto|std::string|char|float|double)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\()");
@@ -194,17 +189,15 @@ int main(int argc, char* argv[]) {
         if(arg == "--server") server = true;
         if(arg == "--stubs") stubs = true;
     }
-
     UserMapper mapper(roots);
     mapper.scan_parallel();
     if (stubs) mapper.generate_stubs();
-
     if (server) {
         httplib::Server svr;
         svr.Get("/map", [&](const httplib::Request&, httplib::Response &res) {
             res.set_content(mapper.to_json().dump(4), "application/json");
         });
-        std::cout << "[User Mapper] Active on http://localhost:8080" << std::endl;
+        std::cout << "[User Mapper] Port 8080" << std::endl;
         svr.listen("0.0.0.0", 8080);
     } else if (watch) {
         mapper.watch();
