@@ -1,56 +1,73 @@
-# 🧠 Cortex: Archetype Expansion Server
+# 🧠 Cortex: Industrial-Scale Engineering Mind
 
-Cortex is a lightweight, C++ powered backend designed to bridge the gap between architectural "archetypes" and functional boilerplate code. It serves as an intelligent expansion engine that identifies code patterns and generates the necessary scaffolding for modern UI components.
+Cortex has evolved from a simple archetype expander into a high-performance, **Dual-Layer Engineering Engine**. It is designed to handle enterprise-scale codebases (up to 10GB) with a focus on autonomous research, impact analysis, and constructive feature grafting.
 
-## 🚀 What is Cortex?
+## 🚀 The Dual-Brain Architecture
 
-At its core, Cortex is an API server that takes a component name and a brief description, then uses a set of pre-defined **Archetypes** to determine the best structure for that component. 
+Cortex operates using two distinct but synchronized layers:
 
-Instead of writing every `useState` or `useEffect` by hand, you tell Cortex what you want, and it returns the "injected" logic, required imports, and state management stubs needed to get the job done.
+### 1. The Subconscious (Internal Mind)
+Located in `internal_brain/`, this is the high-performance research engine.
+- **Port**: 9090 (Private)
+- **Parallel Scanning**: Multi-threaded worker pool that scales with your CPU cores.
+- **Blast Radius Analysis**: Predicts how a change in one file will affect the entire global dependency graph.
+- **Semantic Intent**: Remembers the "Why" behind code, tracking business logic and security constraints.
+- **Self-Healing**: Autonomous verification loops that check system integrity after every change.
+
+### 2. The Frontal Lobe (Cortex Core)
+The primary entry point for code expansion and feature integration.
+- **Port**: 8080
+- **Risk Assessment**: Consults the Internal Mind before every expansion to ensure zero breaking changes.
+- **Constructive Grafting**: Merges new features into existing UI patterns instead of just generating isolated files.
+
+---
 
 ## ✨ Key Features
 
-- **Pattern Matching Engine**: Scans component names and descriptions against keywords to find the most relevant architectural archetype (e.g., Dashboards, Forms, List Views).
-- **Dynamic Scaffolding**: Automatically injects logic and state variables based on the matched archetype.
-- **Dependency Awareness**: Provides a list of required imports (like React hooks or external libraries) specific to the generated code.
-- **Ultra-Lightweight**: Built with `yhirose/cpp-httplib`, it's a single-binary server with zero heavy dependencies.
+- **Industrial Scale**: Optimized to scan 10GB+ projects in seconds using parallel C++ streams.
+- **Fail-Safe Reliability**: Hardened with pervasive exception handling and binary-mode streaming to prevent crashes on malformed files.
+- **Chronos History**: Maintains a persistent, timestamped log of every engineering decision and simulation.
+- **Meta-Consciousness**: Includes a `/meta_scan` feature where Cortex audits its own architecture for loopholes.
+- **User Tooling**: Includes a standalone `mapper.cpp` utility for manual codebase exploration and documentation generation.
 
 ## 🛠️ Technical Stack
 
-- **Language**: C++17
-- **Server**: [cpp-httplib](https://github.com/yhirose/cpp-httplib) for high-performance HTTP handling.
-- **JSON Engine**: [nlohmann/json](https://github.com/nlohmann/json) for seamless data interchange.
+- **Language**: C++17 (Hardened for concurrency)
+- **Networking**: `yhirose/cpp-httplib` with timeout protection.
+- **Data Engine**: `nlohmann/json` for complex state management.
+- **Concurrency**: Custom `WorkerPool` for high-throughput file analysis.
 
 ## 🚦 Getting Started
 
 ### Prerequisites
-- A C++17 compatible compiler (GCC, Clang, or MSVC).
-- `winsock2` (for Windows users).
+- C++17 compatible compiler (GCC 9+, Clang, or MSVC).
+- `lws2_32` (Winsock) for networking.
 
-### Compilation
-To compile the server on Windows (MinGW/GCC):
+### Industrial Compilation
 ```bash
+# Compile the Mind
+g++ -std=c++17 internal_brain/mind.cpp -o internal_brain/mind.exe -lws2_32
+
+# Compile the Core
 g++ -std=c++17 cortex.cpp -o cortex.exe -lws2_32
+
+# Compile the User Tool
+g++ -std=c++17 mapper.cpp -o mapper.exe -lws2_32
 ```
 
-### Running the Server
-1. Ensure `archetypes.json` is in the same directory.
-2. Launch the binary:
-   ```bash
-   ./cortex.exe
-   ```
-3. The server will start at `http://localhost:8080`.
+### Running the Ecosystem
+For full "Constructive Engineering" mode, launch the Mind first:
+1. `./internal_brain/mind.exe` (Initializes the subconscious)
+2. `./cortex.exe` (Activates the primary expansion engine)
+
+---
 
 ## 📂 Project Structure
 
-- `cortex.cpp`: The core server logic and expansion engine.
-- `archetypes.json`: The "brain" containing the templates and keywords for different code structures.
-- `test.html`: A built-in UI to test expansions directly in your browser.
-- `httplib.h` / `json.hpp`: Essential headers for networking and data handling.
-
-## 🤝 Contributing
-
-Cortex is built to be modular. You can extend its capabilities simply by adding new patterns and templates to `archetypes.json`—no recompilation required for new architectural patterns!
+- `/internal_brain`: The private engine (subconscious) for research and memory.
+- `cortex.cpp`: The core API for archetype expansion.
+- `mapper.cpp`: Standalone industrial-scale codebase mapper for the user.
+- `archetypes.json`: The pattern database for UI and system structures.
 
 ---
-*Built with ❤️ for engineers who value architectural consistency.*
+*Cortex: Moving beyond vibe-coding into autonomous, system-aware engineering.*
