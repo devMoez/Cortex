@@ -16,6 +16,7 @@
 #include <queue>
 #include <condition_variable>
 #include <atomic>
+#include <functional>
 #include "json.hpp"
 #include "httplib.h"
 
@@ -32,7 +33,6 @@ struct FileInfo {
     fs::file_time_type last_write_time;
 };
 
-// High-Efficiency Job Queue
 class WorkerPool {
 public:
     WorkerPool(size_t threads) : stop(false) {
@@ -104,14 +104,47 @@ public:
         save_map();
     }
 
-    // ... (same features as before, now parallelized) ...
-    void watch() { /* ... implementation ... */ }
+    void watch() {
+        if (roots.empty()) return;
+        HANDLE hDir = CreateFileA(roots[0].c_str(), FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+        if (hDir == INVALID_HANDLE_VALUE) return;
+        char buffer[1024]; DWORD bytesReturned;
+        std::cout << "[User Mapper] Watching for changes..." << std::endl;
+        while (ReadDirectoryChangesW(hDir, buffer, sizeof(buffer), TRUE, FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_LAST_WRITE, &bytesReturned, NULL, NULL)) {
+            FILE_NOTIFY_INFORMATION* info = (FILE_NOTIFY_INFORMATION*)buffer;
+            do {
+                std::wstring wname(info->FileName, info->FileNameLength / sizeof(WCHAR));
+                std::string name(wname.begin(), wname.end());
+                std::string full_path = (fs::path(roots[0]) / name).string();
+                if (!should_skip(full_path) && fs::exists(full_path) && fs::is_regular_file(full_path)) {
+                    std::cout << "Update detected: " << full_path << std::endl;
+                    file_map[full_path] = process_file_optimized(full_path);
+                    save_map();
+                }
+                if (info->NextEntryOffset == 0) break;
+                info = (FILE_NOTIFY_INFORMATION*)((char*)info + info->NextEntryOffset);
+            } while (true);
+        }
+    }
+
     json to_json() {
         json j = json::array();
         for (auto const& [path, info] : file_map) {
-            j.push_back({{"path", path}, {"symbols", info.symbols}, {"is_unused", info.is_unused}});
+            j.push_back({{"path", path}, {"symbols", info.symbols}, {"purpose", info.purpose}});
         }
         return j;
+    }
+
+    void generate_stubs() {
+        for (auto const& [path, info] : file_map) {
+            if (info.purpose.empty() && (path.find(".cpp") != std::string::npos)) {
+                std::ifstream ifs(path);
+                std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+                ifs.close();
+                std::ofstream ofs(path);
+                ofs << "// Purpose: TODO: verify\n" << content;
+            }
+        }
     }
 
 private:
@@ -124,11 +157,13 @@ private:
         if (!file.is_open()) return info;
         
         std::string line;
+        std::regex re_purpose(R"(//\s*Purpose:\s*(.*))");
         std::regex re_func(R"((?:void|int|auto|std::string|char|float|double)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\()");
         int lines = 0;
         while (std::getline(file, line) && lines < 20000) {
             lines++;
             std::smatch match;
+            if (std::regex_search(line, match, re_purpose)) info.purpose = match[1];
             if (std::regex_search(line, match, re_func)) info.symbols.push_back(match[1]);
         }
         return info;
@@ -138,14 +173,41 @@ private:
         return path.find("node_modules") != std::string::npos || path.find(".git") != std::string::npos || path.find(".exe") != std::string::npos;
     }
 
-    void load_map() { /* ... */ }
+    void load_map() {
+        std::ifstream f("map.json"); if (!f.is_open()) return;
+        json j; try { f >> j; for (auto& item : j) {
+            FileInfo i; i.path = item["path"]; i.symbols = item["symbols"].get<std::vector<std::string>>();
+            i.purpose = item.contains("purpose") ? item["purpose"].get<std::string>() : "";
+            file_map[i.path] = i;
+        }} catch(...) {}
+    }
+
     void save_map() { std::ofstream f("map.json"); f << to_json().dump(4); }
 };
 
 int main(int argc, char* argv[]) {
     std::vector<std::string> roots = {"."};
+    bool watch = false, server = false, stubs = false;
+    for(int i=1; i<argc; ++i) {
+        std::string arg = argv[i];
+        if(arg == "--watch") watch = true;
+        if(arg == "--server") server = true;
+        if(arg == "--stubs") stubs = true;
+    }
+
     UserMapper mapper(roots);
     mapper.scan_parallel();
-    std::cout << "[User Mapper] Ready." << std::endl;
+    if (stubs) mapper.generate_stubs();
+
+    if (server) {
+        httplib::Server svr;
+        svr.Get("/map", [&](const httplib::Request&, httplib::Response &res) {
+            res.set_content(mapper.to_json().dump(4), "application/json");
+        });
+        std::cout << "[User Mapper] Active on http://localhost:8080" << std::endl;
+        svr.listen("0.0.0.0", 8080);
+    } else if (watch) {
+        mapper.watch();
+    }
     return 0;
 }

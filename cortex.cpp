@@ -1,4 +1,3 @@
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -27,7 +26,12 @@ int main() {
         std::cerr << "Error: Could not open archetypes.json" << std::endl;
         return 1;
     }
-    f >> archetypes;
+    try {
+        f >> archetypes;
+    } catch (const std::exception& e) {
+        std::cerr << "Error parsing archetypes.json: " << e.what() << std::endl;
+        return 1;
+    }
 
     httplib::Server svr;
 
@@ -38,12 +42,21 @@ int main() {
             res.set_content(content, "text/html");
         } else {
             res.status = 404;
+            res.set_content("test.html not found", "text/plain");
         }
     });
 
     svr.Post("/expand", [](const httplib::Request &req, httplib::Response &res) {
-        auto body = json::parse(req.body);
-        std::string name = body["component_name"];
+        json body;
+        try {
+            body = json::parse(req.body);
+        } catch (...) {
+            res.status = 400;
+            res.set_content("Invalid JSON", "text/plain");
+            return;
+        }
+
+        std::string name = body.contains("component_name") ? body["component_name"].get<std::string>() : "Unknown";
         std::string desc = body.contains("description") ? body["description"].get<std::string>() : "";
         
         // --- CONSTRUCTIVE ENGINEERING: Risk Assessment ---
@@ -71,9 +84,11 @@ int main() {
 
         auto match_str = [&](const std::string& s) {
             for (auto& arch : archetypes) {
-                for (auto& kw : arch["keywords"]) {
-                    std::string k = kw;
-                    if (s.find(k) != std::string::npos) return arch;
+                if (arch.contains("keywords")) {
+                    for (auto& kw : arch["keywords"]) {
+                        std::string k = kw.get<std::string>();
+                        if (s.find(k) != std::string::npos) return arch;
+                    }
                 }
             }
             return json(nullptr);
@@ -90,13 +105,14 @@ int main() {
             };
         }
 
-        std::string code = replaceAll(matched["default_logic"], "{{COMPONENT_NAME}}", name);
+        std::string logic = matched.contains("default_logic") ? matched["default_logic"].get<std::string>() : "";
+        std::string code = replaceAll(logic, "{{COMPONENT_NAME}}", name);
 
         json output = {
             {"matched_archetype", matched["name"]},
             {"injected_code", code},
-            {"imports_to_add", matched["required_imports"]},
-            {"states_added", matched["states"]}
+            {"imports_to_add", matched.contains("required_imports") ? matched["required_imports"] : json::array()},
+            {"states_added", matched.contains("states") ? matched["states"] : json::array()}
         };
 
         res.set_content(output.dump(), "application/json");
