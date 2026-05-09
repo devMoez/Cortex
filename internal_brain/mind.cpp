@@ -300,18 +300,56 @@ public:
             if (fs::file_size(path) > 50 * 1024 * 1024) { info.error_state = "oversized"; return info; }
             std::ifstream file(path, std::ios::binary);
             if (!file.is_open()) { info.error_state = "denied"; return info; }
+
+            // Detect language from extension
+            std::string ext;
+            auto dot = path.rfind('.');
+            if (dot != std::string::npos) { ext = path.substr(dot); for (auto& c : ext) c = (char)std::tolower(c); }
+            bool is_js  = (ext==".js"||ext==".jsx"||ext==".ts"||ext==".tsx"||ext==".mjs"||ext==".cjs");
+            bool is_py  = (ext==".py");
+            bool is_cpp = (ext==".cpp"||ext==".cc"||ext==".c"||ext==".h"||ext==".hpp");
+
+            // Compiled once per process — static regexes
+            static const std::regex re_purpose (R"((?://|#)\s*Purpose:\s*(.*))");
+            // JS / TS
+            static const std::regex re_js_from  (R"(from\s+['"]([^'"]+)['"])");
+            static const std::regex re_js_imp   (R"(^import\s+['"]([^'"]+)['"])");
+            static const std::regex re_js_req   (R"(require\(['"]([^'"]+)['"]\))");
+            static const std::regex re_js_efunc (R"(export\s+(?:default\s+)?(?:async\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*))");
+            static const std::regex re_js_evar  (R"(export\s+(?:const|let|var|class|type|interface|enum|abstract\s+class)\s+([a-zA-Z_][a-zA-Z0-9_]*))");
+            // Python
+            static const std::regex re_py_from  (R"(^from\s+([\w.]+)\s+import)");
+            static const std::regex re_py_imp   (R"(^import\s+([\w.]+))");
+            static const std::regex re_py_def   (R"(^def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\()");
+            static const std::regex re_py_class (R"(^class\s+([a-zA-Z_][a-zA-Z0-9_]*))");
+            // C / C++
+            static const std::regex re_cpp_func (R"((?:void|int|auto|bool|float|double|char|size_t|std::string)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\()");
+            static const std::regex re_cpp_inc  (R"(#include\s+["<]([^">]+)[">])");
+
             std::string line;
-            std::regex re_purpose(R"(//\s*Purpose:\s*(.*))");
-            std::regex re_func(R"((?:void|int|auto|std::string)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\()");
-            std::regex re_inc(R"(#include\s+["<]([^">]+)[">])");
             int count = 0;
             while (std::getline(file, line) && count < 10000) {
                 count++;
                 if (line.length() > 5000) continue;
                 std::smatch m;
-                if (std::regex_search(line, m, re_purpose)) info.purpose = m[1];
-                if (std::regex_search(line, m, re_func))    info.symbols.push_back(m[1]);
-                if (std::regex_search(line, m, re_inc))     info.dependencies.push_back(m[1]);
+
+                if (std::regex_search(line, m, re_purpose)) info.purpose = m[1].str();
+
+                if (is_js) {
+                    if (std::regex_search(line, m, re_js_from))  info.dependencies.push_back(m[1]);
+                    if (std::regex_search(line, m, re_js_imp))   info.dependencies.push_back(m[1]);
+                    if (std::regex_search(line, m, re_js_req))   info.dependencies.push_back(m[1]);
+                    if (std::regex_search(line, m, re_js_efunc)) info.symbols.push_back(m[1]);
+                    if (std::regex_search(line, m, re_js_evar))  info.symbols.push_back(m[1]);
+                } else if (is_py) {
+                    if (std::regex_search(line, m, re_py_from))  info.dependencies.push_back(m[1]);
+                    if (std::regex_search(line, m, re_py_imp))   info.dependencies.push_back(m[1]);
+                    if (std::regex_search(line, m, re_py_def))   info.symbols.push_back(m[1]);
+                    if (std::regex_search(line, m, re_py_class)) info.symbols.push_back(m[1]);
+                } else if (is_cpp) {
+                    if (std::regex_search(line, m, re_cpp_func)) info.symbols.push_back(m[1]);
+                    if (std::regex_search(line, m, re_cpp_inc))  info.dependencies.push_back(m[1]);
+                }
             }
         } catch (...) { info.error_state = "read_error"; }
         return info;
@@ -760,8 +798,38 @@ private:
     }
 
     std::string resolve_path_internal(const std::string& curr, const std::string& dep) {
-        for (auto const& [p, i] : mental_map)
-            if (p.find(dep) != std::string::npos) return p;
+        // Relative JS/TS import: ./foo, ../bar, ../../utils/helper
+        bool is_relative = dep.size() >= 2 && dep[0] == '.' &&
+                           (dep[1] == '/' || dep[1] == '\\' ||
+                            (dep[1] == '.' && dep.size() >= 3 && (dep[2] == '/' || dep[2] == '\\')));
+        if (is_relative) {
+            // Resolve relative to directory of curr
+            fs::path base = fs::path(curr).parent_path();
+            fs::path candidate = fs::weakly_canonical(base / dep);
+            std::string cand_str = norm_path(candidate.string());
+
+            // Try candidate as-is (already has extension), then common extensions
+            static const std::vector<std::string> js_exts = {
+                "", ".ts", ".tsx", ".js", ".jsx",
+                "/index.ts", "/index.tsx", "/index.js", "/index.jsx"
+            };
+            for (const auto& ext : js_exts) {
+                std::string try_path = cand_str + ext;
+                for (auto const& [p, i] : mental_map) {
+                    if (norm_path(p) == try_path) return p;
+                }
+            }
+        }
+
+        // Non-relative (package or C++ include): fall back to suffix match
+        std::string ndep = norm_path(dep);
+        for (auto const& [p, i] : mental_map) {
+            std::string np = norm_path(p);
+            if (np.length() > ndep.length()) {
+                size_t off = np.length() - ndep.length();
+                if (np.substr(off) == ndep && np[off - 1] == '/') return p;
+            }
+        }
         return "";
     }
 
@@ -774,9 +842,17 @@ private:
     }
 
     bool should_skip(const std::string& p) {
-        return p.find("internal_brain") != std::string::npos ||
-               p.find(".git")          != std::string::npos  ||
-               p.find("node_modules")  != std::string::npos;
+        static const std::vector<std::string> skip_segments = {
+            "internal_brain", ".git", "node_modules",
+            ".next", "dist", "build", ".cache", "__pycache__", ".turbo", ".vercel"
+        };
+        std::string np = norm_path(p);
+        for (const auto& seg : skip_segments) {
+            if (np.find("/" + seg + "/") != std::string::npos ||
+                np.find("/" + seg)       == np.length() - seg.length() - 1 ||
+                np.rfind(seg + "/", 0)   == 0) return true;
+        }
+        return false;
     }
 
     // ── Persistence ──────────────────────────────────────────────────────────
