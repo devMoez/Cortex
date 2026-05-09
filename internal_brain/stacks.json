@@ -1,0 +1,37 @@
+{
+    "active": null,
+    "stacks": {
+        "fullstack": {
+            "description": "React + Node + database — all rules active",
+            "disable": [],
+            "enable": []
+        },
+        "frontend-only": {
+            "description": "Frontend only project — no backend or database rules",
+            "disable": ["pre_003", "db_001", "db_002", "db_003"],
+            "enable": []
+        },
+        "backend-only": {
+            "description": "Backend/API only — no UI rules",
+            "disable": ["ui_001", "ui_002", "ui_003", "ui_004", "pre_004"],
+            "enable": []
+        },
+        "python": {
+            "description": "Python project — disables JS/TS and UI-specific rules",
+            "disable": ["ui_001", "ui_002", "ui_003", "ui_004", "pre_004", "exc_006", "code_006"],
+            "enable": []
+        },
+        "minimal": {
+            "description": "Only the hard-blocking rules — for fast prototyping or demos",
+            "disable": [
+                "pre_002", "pre_006",
+                "code_004", "code_005",
+                "ui_002", "ui_004",
+                "arch_002", "arch_003",
+                "verify_003",
+                "exc_004", "exc_006"
+            ],
+            "enable": []
+        }
+    }
+}

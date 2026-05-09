@@ -1,0 +1,274 @@
+[
+    {
+        "id": "pre_001",
+        "category": "preflight",
+        "name": "Check blast radius before touching any file",
+        "description": "Before modifying any file, call /preflight to see which files depend on it. Every file in the blast radius must be reviewed and updated if the interface changes.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "pre_002",
+        "category": "preflight",
+        "name": "Check for existing similar feature before creating new",
+        "description": "Before creating a new component, route, or feature, scan the codebase for similar existing implementations. Never duplicate what already exists.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "pre_003",
+        "category": "preflight",
+        "name": "Backend must exist before adding frontend",
+        "description": "Before adding any UI that fetches or sends data, verify the backend endpoint exists. If it does not exist, create it in the same change — never add frontend-only features that depend on missing backend.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "pre_004",
+        "category": "preflight",
+        "name": "Read existing features before redesigning",
+        "description": "Before changing any UI layout, page, or component design, list all existing features in that area and present them to the user. Ask which ones to keep, merge, or remove with the new design.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "pre_005",
+        "category": "preflight",
+        "name": "Warn before breaking changes to shared interfaces",
+        "description": "If you are renaming an exported function, changing a function signature, removing a prop, or changing an API response shape — stop and warn the user first. These are breaking changes that will silently break every caller. List all affected files before proceeding.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "pre_006",
+        "category": "preflight",
+        "name": "Ask before acting on ambiguous instructions",
+        "description": "If the user's instruction can be interpreted in more than one way (e.g. 'update the sidebar' could mean style, content, or behavior), ask one clarifying question before writing any code. Never guess and implement the wrong thing.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "code_001",
+        "category": "coding",
+        "name": "No dummy, mock, or placeholder data",
+        "description": "Never ship hardcoded arrays, fake API responses, TODO comments, or placeholder UI. Either implement the real thing fully or do not add it at all.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "code_002",
+        "category": "coding",
+        "name": "Update all blast radius files in the same change",
+        "description": "When a shared file changes, every file that imports or depends on it must be updated in the same change set. Partial updates are not acceptable.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "code_003",
+        "category": "coding",
+        "name": "Full-stack changes must be complete",
+        "description": "A feature is not done until frontend, backend, and data layer are all wired together. Never close a task with only one layer done.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "code_004",
+        "category": "coding",
+        "name": "No debug or console output in production code",
+        "description": "Remove all console.log, print, debugger, var_dump, or similar debug statements before finishing. These are not part of a production codebase.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "code_005",
+        "category": "coding",
+        "name": "No commented-out code",
+        "description": "Do not leave blocks of commented-out code. If it is no longer needed, delete it. If it might be needed, that is what git history is for.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "code_006",
+        "category": "coding",
+        "name": "No hardcoded URLs, ports, or environment values",
+        "description": "Never hardcode localhost URLs, port numbers, API base URLs, or environment-specific values directly in code. Use environment variables or a config file. Hardcoded values break every environment except the one they were written for.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "exc_001",
+        "category": "exception",
+        "name": "Every async operation must handle errors",
+        "description": "Every async function call, fetch, database query, or file operation must have error handling — try/catch, .catch(), or equivalent. Never leave async operations unguarded. Unhandled promise rejections crash the entire app silently.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "exc_002",
+        "category": "exception",
+        "name": "Never expose raw errors or stack traces to the user",
+        "description": "Catch all errors at the boundary and show a human-readable message. Never send error.stack, exception details, or internal server state to the frontend or the end user. Log it server-side, show a clean message client-side.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "exc_003",
+        "category": "exception",
+        "name": "Handle loading state for every async operation",
+        "description": "Every operation that loads data must have a loading state. The UI must never be blank or broken while waiting for data. Show a spinner, skeleton, or loading indicator. Missing loading states make apps feel broken.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "exc_004",
+        "category": "exception",
+        "name": "Handle empty state for every list or data view",
+        "description": "Every list, table, or data view must handle the case where there is no data. Show an empty state message — never leave a blank white box. This is part of a complete feature.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "exc_005",
+        "category": "exception",
+        "name": "Validate inputs before processing",
+        "description": "Validate all inputs at the boundary — form fields, API request bodies, function arguments from external sources. Do not assume the shape or type of incoming data is correct. Invalid input should be rejected with a clear message, not cause a crash.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "exc_006",
+        "category": "exception",
+        "name": "API responses must always return a consistent error shape",
+        "description": "All API error responses must follow a consistent structure: { error: string, code?: string }. Never return different error shapes from different endpoints. Inconsistent errors break every client that tries to handle them.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "sec_001",
+        "category": "security",
+        "name": "No hardcoded credentials or secrets",
+        "description": "Never write API keys, passwords, tokens, database connection strings, or any secret directly in code. Use environment variables. Hardcoded secrets get committed to git and are compromised immediately.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "sec_002",
+        "category": "security",
+        "name": "No sensitive data in frontend or client code",
+        "description": "Never put secret keys, internal IDs, admin tokens, or private business logic in frontend bundles. Anything shipped to the browser is public. Secrets belong only on the server.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "sec_003",
+        "category": "security",
+        "name": "Sanitize all user-generated content before rendering",
+        "description": "Never render user-supplied text as raw HTML. Always sanitize or escape it. Unsanitized user content is an XSS vulnerability — one of the most common and damaging security bugs.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "db_001",
+        "category": "database",
+        "name": "No destructive database operations without confirmation",
+        "description": "Before running DELETE, DROP, or TRUNCATE — or any operation that permanently removes data — stop and confirm with the user. Show exactly what will be deleted. This cannot be undone.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "db_002",
+        "category": "database",
+        "name": "Migrations must be reversible",
+        "description": "Every database migration must have a rollback. Never write a migration that cannot be undone. A migration that drops a column with no rollback means data is gone permanently if anything goes wrong.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "db_003",
+        "category": "database",
+        "name": "No raw SQL with unparameterized user input",
+        "description": "Never concatenate user input directly into a SQL query string. Always use parameterized queries or an ORM. Unparameterized queries are SQL injection vulnerabilities.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "ui_001",
+        "category": "ui",
+        "name": "Never silently remove existing features",
+        "description": "When redesigning or refactoring any UI, identify every existing feature first. Ask the user whether to keep, merge, or remove each one. Never delete working functionality without explicit approval.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "ui_002",
+        "category": "ui",
+        "name": "Merge old and new design — do not start from scratch",
+        "description": "When adding new UI, integrate with the existing design system, components, and patterns. Starting from scratch overwrites tested work. Only rebuild from scratch when the user explicitly asks.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "ui_003",
+        "category": "ui",
+        "name": "Every interactive element must have a disabled or inactive state",
+        "description": "Buttons, forms, and inputs that trigger async operations must be disabled while the operation is in progress to prevent double-submissions. A button that can be clicked twice during a save is a bug.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "ui_004",
+        "category": "ui",
+        "name": "Mobile responsiveness is not optional",
+        "description": "Every UI change must work on mobile screen sizes unless the project is explicitly desktop-only. Test or at minimum consider the mobile layout before finishing.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "arch_001",
+        "category": "architecture",
+        "name": "No circular dependencies",
+        "description": "Never introduce an import that creates a circular dependency. Run /analyze_deps after every structural change to verify the dependency graph is clean.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "arch_002",
+        "category": "architecture",
+        "name": "Shared logic must live in shared files",
+        "description": "If the same function, constant, or type is needed in more than one place, it must be moved to a shared utility or module — not duplicated. Duplicated logic diverges over time and causes hard-to-find bugs.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "arch_003",
+        "category": "architecture",
+        "name": "Do not add a new dependency without checking if one already exists",
+        "description": "Before adding a new npm package, pip package, or external library, check if the project already has a library that does the same thing. Adding duplicate dependencies inflates bundle size and creates maintenance burden.",
+        "severity": "warning",
+        "active": true
+    },
+    {
+        "id": "verify_001",
+        "category": "verification",
+        "name": "Blast radius coverage must be complete",
+        "description": "After making changes, call /verify_change with the list of modified files. If any blast radius file is missing from the change set, the change is incomplete and must be extended before finishing.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "verify_002",
+        "category": "verification",
+        "name": "Self-check before declaring done",
+        "description": "Before saying a task is complete, mentally run through: Did I handle errors? Did I handle loading state? Did I handle empty state? Did I update all dependent files? Did I leave any TODOs or console.logs? If any answer is no — the task is not done.",
+        "severity": "error",
+        "active": true
+    },
+    {
+        "id": "verify_003",
+        "category": "verification",
+        "name": "No new files without a stated purpose",
+        "description": "Every new file created must have a clear, single purpose. If you cannot describe what the file does in one sentence, it is either misnamed or doing too many things. Both are problems.",
+        "severity": "warning",
+        "active": true
+    }
+]
