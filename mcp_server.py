@@ -23,7 +23,9 @@ from mcp.server.fastmcp import FastMCP
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-CORTEX_URL = "http://localhost:8080"
+# Override with env var: CORTEX_URL=http://my-server:8080
+import os
+CORTEX_URL = os.environ.get("CORTEX_URL", "http://localhost:8080")
 TIMEOUT    = 15  # seconds
 
 # ── MCP Server ───────────────────────────────────────────────────────────────

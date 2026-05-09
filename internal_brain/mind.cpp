@@ -869,9 +869,20 @@ private:
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Usage: mind.exe [root_directory] [--port PORT]
+    // Defaults: scan "." on port 9090
+    std::string root = ".";
+    int port = 9090;
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--port" && i + 1 < argc) { port = std::stoi(argv[++i]); }
+        else if (arg.rfind("--", 0) != 0)    { root = arg; }
+    }
+
     try {
-        CortexMind mind({"."});
+        std::cout << "[Cortex Mind] Scanning: " << fs::absolute(root).string() << std::endl;
+        CortexMind mind({root});
         mind.research_large_scale();
         mind.start_watching();
 
@@ -969,8 +980,8 @@ int main() {
             } catch (...) { res.status = 400; res.set_content("bad_request", "text/plain"); }
         });
 
-        std::cout << "[Cortex Mind] Active on Port 9090 | Watcher: live" << std::endl;
-        svr.listen("0.0.0.0", 9090);
+        std::cout << "[Cortex Mind] Active on Port " << port << " | Watcher: live" << std::endl;
+        svr.listen("0.0.0.0", port);
     } catch (const std::exception& e) {
         std::cerr << "Fatal Mind: " << e.what() << std::endl;
         return 1;

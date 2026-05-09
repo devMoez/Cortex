@@ -21,7 +21,15 @@ std::string replaceAll(std::string str, const std::string& from, const std::stri
     return str;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Usage: cortex.exe [--port PORT] [--brain-port PORT]
+    int port = 8080, brain_port = 9090;
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--port"       && i + 1 < argc) port       = std::stoi(argv[++i]);
+        if (arg == "--brain-port" && i + 1 < argc) brain_port = std::stoi(argv[++i]);
+    }
+
     std::ifstream f("archetypes.json");
     if (!f.is_open()) { std::cerr << "Error: Could not open archetypes.json" << std::endl; return 1; }
     try { f >> archetypes; } catch (...) { std::cerr << "Error parsing archetypes.json" << std::endl; return 1; }
@@ -37,9 +45,9 @@ int main() {
     });
 
     // --- Proxy Endpoints to Internal Mind ---
-    auto proxy_get = [](const std::string& endpoint) {
-        return [endpoint](const httplib::Request &, httplib::Response &res) {
-            httplib::Client brain("localhost", 9090);
+    auto proxy_get = [brain_port](const std::string& endpoint) {
+        return [endpoint, brain_port](const httplib::Request &, httplib::Response &res) {
+            httplib::Client brain("localhost", brain_port);
             auto brain_res = brain.Get(endpoint);
             if (brain_res && brain_res->status == 200) {
                 res.set_content(brain_res->body, "application/json");
@@ -61,9 +69,9 @@ int main() {
     svr.Get("/exceptions",   proxy_get("/exceptions"));
 
     // POST proxies — forward body to brain and return response
-    auto proxy_post = [](const std::string& endpoint) {
-        return [endpoint](const httplib::Request &req, httplib::Response &res) {
-            httplib::Client brain("localhost", 9090);
+    auto proxy_post = [brain_port](const std::string& endpoint) {
+        return [endpoint, brain_port](const httplib::Request &req, httplib::Response &res) {
+            httplib::Client brain("localhost", brain_port);
             auto brain_res = brain.Post(endpoint, req.body, "application/json");
             if (brain_res && brain_res->status == 200) {
                 res.set_content(brain_res->body, "application/json");
@@ -81,24 +89,24 @@ int main() {
     svr.Post("/verify_change",    proxy_post("/verify_change"));
     svr.Post("/rescan",           proxy_post("/rescan"));
     svr.Post("/exceptions",       proxy_post("/exceptions"));
-    svr.Post("/stack/:name", [](const httplib::Request& req, httplib::Response& res) {
-        httplib::Client brain("localhost", 9090);
+    svr.Post("/stack/:name", [brain_port](const httplib::Request& req, httplib::Response& res) {
+        httplib::Client brain("localhost", brain_port);
         auto r = brain.Post("/stack/" + req.path_params.at("name"), "", "application/json");
         if (r && r->status == 200) res.set_content(r->body, "application/json");
         else { res.status = 503; res.set_content("{\"error\":\"Internal Brain Offline\"}", "application/json"); }
     });
 
-    auto proxy_delete = [](const std::string& prefix) {
-        return [prefix](const httplib::Request& req, httplib::Response& res) {
-            httplib::Client brain("localhost", 9090);
+    auto proxy_delete = [brain_port](const std::string& prefix) {
+        return [prefix, brain_port](const httplib::Request& req, httplib::Response& res) {
+            httplib::Client brain("localhost", brain_port);
             auto r = brain.Delete(prefix + req.path_params.at("id"));
             if (r && r->status == 200) res.set_content(r->body, "application/json");
             else { res.status = 503; res.set_content("{\"error\":\"Internal Brain Offline\"}", "application/json"); }
         };
     };
-    auto proxy_patch = [](const std::string& prefix) {
-        return [prefix](const httplib::Request& req, httplib::Response& res) {
-            httplib::Client brain("localhost", 9090);
+    auto proxy_patch = [brain_port](const std::string& prefix) {
+        return [prefix, brain_port](const httplib::Request& req, httplib::Response& res) {
+            httplib::Client brain("localhost", brain_port);
             auto r = brain.Patch(prefix + req.path_params.at("id"), req.body, "application/json");
             if (r && r->status == 200) res.set_content(r->body, "application/json");
             else if (r && r->status == 400) { res.status = 400; res.set_content(r->body, "text/plain"); }
@@ -110,12 +118,11 @@ int main() {
     svr.Delete("/exceptions/:id", proxy_delete("/exceptions/"));
     svr.Patch("/rules/:id",       proxy_patch("/rules/"));
 
-    svr.Post("/expand", [](const httplib::Request &req, httplib::Response &res) {
+    svr.Post("/expand", [brain_port](const httplib::Request &req, httplib::Response &res) {
         json body; try { body = json::parse(req.body); } catch (...) { res.status = 400; return; }
         std::string name = body.value("component_name", "Unknown");
-        
-        // Risk assessment via brain
-        httplib::Client brain("localhost", 9090);
+
+        httplib::Client brain("localhost", brain_port);
         json graft_req = {{"symbol", name}};
         auto graft_res = brain.Post("/graft", graft_req.dump(), "application/json");
 
@@ -134,7 +141,7 @@ int main() {
         res.set_content(out.dump(), "application/json");
     });
 
-    std::cout << "[Cortex Core] Active on http://localhost:8080" << std::endl;
-    svr.listen("0.0.0.0", 8080);
+    std::cout << "[Cortex Core] Active on http://localhost:" << port << std::endl;
+    svr.listen("0.0.0.0", port);
     return 0;
 }

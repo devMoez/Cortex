@@ -211,18 +211,72 @@ Cortex is now live on `http://localhost:8080`. The brain runs privately on port 
 
 On startup, Cortex scans your entire codebase, builds the dependency graph, loads your rules and stacks, and starts the live watcher. From that point on, the map stays current automatically.
 
-**Point Cortex at a specific directory** by editing the root path in `mind.cpp` main:
-```cpp
-CortexMind mind({"path/to/your/project"});
+**Point Cortex at any directory** by passing it as an argument — no recompiling needed:
+```bash
+./internal_brain/mind.exe C:\Users\you\projects\my-app
+./cortex.exe
+```
+
+**Custom ports** (useful if 8080/9090 are taken):
+```bash
+./internal_brain/mind.exe C:\path\to\project --port 9191
+./cortex.exe --port 8181 --brain-port 9191
+```
+
+**MCP server pointing at a remote Cortex instance:**
+```bash
+set CORTEX_URL=http://my-server:8080
+python mcp_server.py
 ```
 
 ---
 
+## MCP Integration
+
+Cortex ships with a Python MCP server (`mcp_server.py`) that exposes all analysis as tools any MCP-compatible AI can call natively — Claude Code, Cursor, Continue, or your own assistant.
+
+**Install and register with Claude Code:**
+```bash
+install_mcp.bat
+```
+
+**Or register manually:**
+```bash
+claude mcp add cortex -- python path/to/mcp_server.py
+```
+
+**Verify it can reach your running Cortex instance:**
+```bash
+python mcp_server.py --check
+```
+
+Once registered, Claude has these tools available automatically in every session:
+
+| Tool | Purpose |
+|---|---|
+| `cortex_summary` | Session start — codebase health + most depended-on files |
+| `cortex_preflight` | Before editing — blast radius + active rules for a file |
+| `cortex_preflight_batch` | Before editing multiple files at once |
+| `cortex_verify` | After writing — confirms blast radius is fully covered |
+| `cortex_rules` | Get active ruleset, filter by category |
+| `cortex_add_exception` | Acknowledge a known rule violation with reason |
+| `cortex_activate_stack` | Switch rule profile for the project |
+| `cortex_toggle_rule` | Enable or disable a specific rule |
+| `cortex_rescan` | Force immediate rescan |
+| `cortex_map` | Full dependency map |
+| `cortex_circular_deps` | Circular dependency report |
+
+**Point MCP at a remote Cortex instance** (for team or cloud use):
+```bash
+set CORTEX_URL=http://your-server:8080
+python mcp_server.py
+```
+
 ## What's Coming
 
-**MCP Server** — The most important next step. Cortex will expose its analysis as MCP tools so Claude, Cursor, Continue, and any other MCP-compatible tool can call it natively. The AI won't need to be prompted to use Cortex — it'll be available as a tool it reaches for automatically when it needs to understand the codebase.
+**Ultron Integration** — Cortex ships as a default tool inside Ultron, a Jarvis-inspired coding assistant built on OpenCode. Every AI session in Ultron starts with a Cortex summary and has preflight/verify available throughout.
 
-**Ultron Integration** — Cortex will ship as a default tool inside Ultron, a Jarvis-inspired coding assistant built on OpenCode. Every AI session in Ultron will start with a Cortex summary and have preflight/verify available throughout.
+**GitHub Integration** — Connect a GitHub repo URL instead of a local path. Cortex clones, scans, and keeps it in sync. Foundation for hosted multi-user access.
 
 ---
 
